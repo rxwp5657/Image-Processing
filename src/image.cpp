@@ -18,7 +18,7 @@ namespace kernel
             unsigned char b = static_cast<unsigned char>(*(img + 2));
             unsigned char a = nr_channels_ == 4 ? static_cast<int>(*(img + 3)) : 1;
 
-            Pixel pixel{r, g, b, a};
+            Pixel<unsigned char> pixel{r, g, b, a};
 
             image_.push_back(pixel);
         }
@@ -26,7 +26,7 @@ namespace kernel
         stbi_image_free(data);
     }
 
-    Image::Image(int width, int height, int nr_channels, const std::vector<Pixel>& image)
+    Image::Image(int width, int height, int nr_channels, const std::vector<Pixel<unsigned char>>& image)
     : image_{image},
       width_{width},
       height_{height},
@@ -35,9 +35,9 @@ namespace kernel
 
     }
 
-    Image Image::GrayScale()
+    Image Image::GrayScale() noexcept
     {
-        std::vector<Pixel> gray_image;
+        std::vector<Pixel<unsigned char>> gray_image;
         int num_chan = nr_channels_ == 4 ? 2 : 1;
 
         for(auto& pixel : image_)
@@ -51,7 +51,7 @@ namespace kernel
             auto a = static_cast<unsigned char>(1.0);
             auto gray = static_cast<unsigned char>(r + g + b);
 
-            Pixel gray_pixel{gray, gray, gray, a};
+            Pixel<unsigned char> gray_pixel{gray, gray, gray, a};
 
             gray_image.push_back(gray_pixel);
         }
@@ -76,5 +76,33 @@ namespace kernel
         }
         
         stbi_write_jpg(image_name.c_str(), width_, height_, nr_channels_, &temp_image[0], 100);
+    }
+
+    Pixel<unsigned char> Image::Convoluted(unsigned int r, 
+                                           unsigned int c, 
+                                           const Kernel& kernel) noexcept
+    {
+        Pixel<int> acc{0, 0, 0, 1};
+        auto factor = static_cast<int>((kernel.Size() - 1) / 2);
+
+        for(int i = -factor; i <= factor; i++)
+            for(int j = -factor; j <= factor; j++)
+                acc += Get(r + i, c + j) * kernel.Get(factor + i, factor + j);
+        
+        if(kernel.Factor() != 1)
+            acc *= kernel.Factor(); 
+
+        return ToPixel(acc);
+    }
+
+    Image Image::Convolution(const Kernel& mask) noexcept
+    {
+        std::vector<Pixel<unsigned char>> result{};
+
+        for(int i = 0; i < width_; i++)
+            for(int j = 0; j < height_; j++)
+                result.push_back(Convoluted(i,j,mask));
+        
+        return Image{width_, height_, nr_channels_, result};
     }
 }
